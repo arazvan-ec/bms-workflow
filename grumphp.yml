@@ -1,0 +1,37 @@
+grumphp:
+    hooks_dir: ~
+    hooks_preset: local
+    stop_on_failure: true
+    ignore_unstaged_changes: false
+    process_timeout: 120
+
+    tasks:
+        phpcsfixer:
+            config: .php-cs-fixer.dist.php
+            allow_risky: true
+            diff: true
+            triggered_by: ['php']
+
+        phpstan:
+            configuration: phpstan.neon
+            memory_limit: '-1'
+            triggered_by: ['php']
+
+        phpunit:
+            config_file: phpunit.xml.dist
+            always_execute: false
+            triggered_by: ['php']
+
+        git_commit_message:
+            allow_empty_message: false
+            enforce_capitalized_subject: false
+            enforce_no_subject_punctuations: false
+            enforce_no_subject_trailing_period: true
+            enforce_single_lined_subject: true
+            max_subject_width: 72
+            max_body_width: 72
+            matchers:
+                - '/^(feat|fix|docs|style|refactor|test|chore|ci|perf|build|revert)(\(.+\))?: .{1,72}/'
+            case_insensitive: true
+            multiline: true
+            additional_modifiers: ''

@@ -1,0 +1,140 @@
+stages:
+  - quality
+  - test
+  - build
+  - deploy
+
+variables:
+  COMPOSER_MEMORY_LIMIT: '-1'
+  PHP_IMAGE: php:8.3-cli
+
+# ---------------------------------------------------------------------------
+# Templates
+# ---------------------------------------------------------------------------
+
+.php-base:
+  image: $PHP_IMAGE
+  before_script:
+    - apt-get update -yqq
+    - apt-get install -yqq git unzip libpq-dev libicu-dev libzip-dev
+    - docker-php-ext-install intl pdo_pgsql zip opcache
+    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+    - composer install --no-interaction --no-progress --prefer-dist
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - vendor/
+      - .php-cs-fixer.cache
+
+# ---------------------------------------------------------------------------
+# Stage: quality
+# ---------------------------------------------------------------------------
+
+php-cs-fixer:
+  extends: .php-base
+  stage: quality
+  script:
+    - vendor/bin/php-cs-fixer fix --dry-run --diff --verbose
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+phpstan:
+  extends: .php-base
+  stage: quality
+  script:
+    - vendor/bin/phpstan analyse --memory-limit=-1 --no-progress
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ---------------------------------------------------------------------------
+# Stage: test
+# ---------------------------------------------------------------------------
+
+phpunit:
+  extends: .php-base
+  stage: test
+  services:
+    - name: postgres:16-alpine
+      alias: db
+      variables:
+        POSTGRES_DB: app_test
+        POSTGRES_USER: app
+        POSTGRES_PASSWORD: test
+  variables:
+    DATABASE_URL: "postgresql://app:test@db:5432/app_test?serverVersion=16&charset=utf8"
+  script:
+    - php bin/console doctrine:database:create --env=test --if-not-exists || true
+    - php bin/console doctrine:migrations:migrate --env=test --no-interaction || true
+    - vendor/bin/phpunit --coverage-text --coverage-cobertura=coverage.xml
+  coverage: '/^\s*Lines:\s*\d+.\d+\%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    expire_in: 30 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ---------------------------------------------------------------------------
+# Stage: build
+# ---------------------------------------------------------------------------
+
+build-image:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+    IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    IMAGE_LATEST: $CI_REGISTRY_IMAGE:latest
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build --target production -t $IMAGE_TAG -t $IMAGE_LATEST .
+    - docker push $IMAGE_TAG
+    - docker push $IMAGE_LATEST
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ---------------------------------------------------------------------------
+# Stage: deploy
+# ---------------------------------------------------------------------------
+
+deploy-staging:
+  stage: deploy
+  image: alpine:latest
+  environment:
+    name: staging
+    url: https://staging.example.com
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Deploy to staging environment"
+    - echo "Image tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+    # TODO: Add deployment commands (kubectl, docker-compose, etc.)
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+
+deploy-production:
+  stage: deploy
+  image: alpine:latest
+  environment:
+    name: production
+    url: https://production.example.com
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Deploy to production environment"
+    - echo "Image tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+    # TODO: Add deployment commands (kubectl, docker-compose, etc.)
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  needs:
+    - deploy-staging
