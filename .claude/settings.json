@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=$(echo \"$TOOL_INPUT\" | jq -r '.file_path // empty') && [ -n \"$FILE\" ] && [[ \"$FILE\" == *.php ]] && vendor/bin/php-cs-fixer fix \"$FILE\" --quiet 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=$(echo \"$TOOL_INPUT\" | jq -r '.file_path // empty') && [[ \"$FILE\" == *composer.lock* || \"$FILE\" == *.env.local* || \"$FILE\" == *migrations/Version* ]] && echo 'BLOCKED: No modificar composer.lock, .env.local ni migraciones existentes directamente' >&2 && exit 2 || exit 0"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(vendor/bin/phpunit*)",
+      "Bash(vendor/bin/phpstan*)",
+      "Bash(vendor/bin/php-cs-fixer*)",
+      "Bash(php bin/console*)",
+      "Bash(composer require*)",
+      "Bash(composer dump-autoload*)",
+      "Bash(make *)",
+      "Bash(php .factory/*)"
+    ]
+  }
+}

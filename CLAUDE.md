@@ -173,6 +173,49 @@ tests/
 
 ---
 
+## Comandos rápidos
+
+```bash
+# Quality Gate
+vendor/bin/php-cs-fixer fix                          # Corregir estilo
+vendor/bin/php-cs-fixer fix --dry-run --diff          # Verificar estilo (sin cambios)
+vendor/bin/phpstan analyse                            # Análisis estático
+vendor/bin/phpunit                                    # Todos los tests
+vendor/bin/phpunit tests/Unit                         # Solo tests unitarios
+vendor/bin/phpunit tests/Unit/Service/MiServiceTest.php  # Test individual
+make quality                                          # Quality gate completo (lint + analyse + test)
+
+# Doctrine
+php bin/console doctrine:migrations:diff              # Generar migración desde entities
+php bin/console doctrine:migrations:migrate           # Ejecutar migraciones
+
+# Scaffolding
+php .factory/scaffold.php NombreRecurso               # Generar todos los archivos de un recurso
+php .factory/scaffold.php NombreRecurso --dry-run     # Ver qué archivos se crearían
+php .factory/validate.php                             # Validar estructura del proyecto
+make scaffold NAME=NombreRecurso                      # Scaffold via Makefile
+
+# Servidor de desarrollo
+make up                                               # Levantar Docker (app + nginx + db)
+make down                                             # Detener Docker
+make install                                          # Composer install
+```
+
+---
+
+## Errores comunes a evitar
+
+- **NO uses `EntityManagerInterface` directamente en controllers** — inyecta el Service correspondiente
+- **NO olvides `declare(strict_types=1)`** — php-cs-fixer lo marca como error, phpstan dará falsos positivos sin él
+- **Las migraciones NO se escriben a mano** — siempre generar con `doctrine:migrations:diff`
+- **Los DTOs de request siempre son `readonly class`** con atributos `#[Assert\...]`
+- **NO retornes arrays desde los Services** — usa DTOs de Response
+- **NO hagas `new Service()` manualmente** — Symfony los inyecta por constructor (autowiring)
+- **NO mezcles lógica de validación en el Service** — la validación va en el DTO con atributos de Symfony, el Controller la ejecuta con el Validator
+- **NO uses `$this->getDoctrine()`** — está deprecado, inyecta el Repository directamente
+
+---
+
 ## Plantillas de referencia
 
 Las plantillas de código están en `.factory/templates/`. Usarlas como referencia
