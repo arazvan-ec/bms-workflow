@@ -48,6 +48,15 @@ phpstan:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
+factory-validate:
+  extends: .php-base
+  stage: quality
+  script:
+    - php .factory/validate.php
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
 # ---------------------------------------------------------------------------
 # Stage: test
 # ---------------------------------------------------------------------------

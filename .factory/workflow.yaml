@@ -1,0 +1,227 @@
+# =============================================================================
+# Software Factory - Workflow Definition
+# =============================================================================
+# Este archivo define el proceso estándar de desarrollo.
+# Cada feature debe pasar por todas las fases en orden.
+# Las fases de quality gate son bloqueantes: si fallan, no se continúa.
+
+name: "BMS Software Factory"
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Capas de la arquitectura (orden de desarrollo)
+# ---------------------------------------------------------------------------
+architecture:
+  layers:
+    - name: domain
+      description: "Entidades de dominio y repositorios"
+      directories:
+        - src/Entity
+        - src/Repository
+      depends_on: []
+
+    - name: service
+      description: "DTOs, excepciones y lógica de negocio"
+      directories:
+        - src/DTO/Request
+        - src/DTO/Response
+        - src/Exception
+        - src/Service
+      depends_on: [domain]
+
+    - name: http
+      description: "Controllers y endpoints HTTP"
+      directories:
+        - src/Controller
+      depends_on: [service]
+
+    - name: event
+      description: "Listeners y subscribers de eventos (opcional)"
+      directories:
+        - src/EventListener
+        - src/EventSubscriber
+      depends_on: [service]
+
+# ---------------------------------------------------------------------------
+# Fases del workflow
+# ---------------------------------------------------------------------------
+phases:
+
+  # --- Fase 1: Análisis ---
+  analyse:
+    order: 1
+    name: "Análisis"
+    description: "Entender el alcance y planificar los archivos a crear/modificar"
+    steps:
+      - "Leer archivos existentes en src/ y tests/ relevantes al cambio"
+      - "Identificar entidades, servicios y controladores afectados"
+      - "Determinar nuevas entidades o modificaciones a existentes"
+      - "Definir endpoints HTTP a crear/modificar"
+      - "Listar casos de test necesarios"
+    output: "Lista de archivos a crear/modificar con justificación"
+    blocking: false
+
+  # --- Fase 2: Domain Layer ---
+  domain:
+    order: 2
+    name: "Capa de Dominio"
+    description: "Crear/modificar entidades y repositorios"
+    steps:
+      - action: "create_entity"
+        template: "entity.php.tpl"
+        target: "src/Entity/{Name}.php"
+        rules:
+          - "Usar atributos PHP 8 para ORM mapping"
+          - "Propiedades tipadas"
+          - "declare(strict_types=1)"
+          - "Sin lógica de negocio"
+
+      - action: "create_repository"
+        template: "repository.php.tpl"
+        target: "src/Repository/{Name}Repository.php"
+        rules:
+          - "Extender ServiceEntityRepository"
+          - "Métodos con nombres descriptivos"
+          - "QueryBuilder para consultas complejas"
+
+      - action: "create_migration"
+        command: "php bin/console doctrine:migrations:diff"
+    blocking: false
+
+  # --- Fase 3: Service Layer ---
+  service:
+    order: 3
+    name: "Capa de Servicio"
+    description: "Crear DTOs, excepciones y servicios"
+    steps:
+      - action: "create_request_dto"
+        template: "request_dto.php.tpl"
+        target: "src/DTO/Request/{Action}{Resource}Request.php"
+        rules:
+          - "Clase readonly"
+          - "Atributos de validación Symfony"
+          - "Propiedades tipadas"
+
+      - action: "create_response_dto"
+        template: "response_dto.php.tpl"
+        target: "src/DTO/Response/{Resource}Response.php"
+        rules:
+          - "Clase readonly"
+          - "Método estático fromEntity() para mapeo"
+
+      - action: "create_exception"
+        template: "exception.php.tpl"
+        target: "src/Exception/{Name}Exception.php"
+        rules:
+          - "Nombre descriptivo"
+          - "Código HTTP apropiado"
+
+      - action: "create_service"
+        template: "service.php.tpl"
+        target: "src/Service/{Name}Service.php"
+        rules:
+          - "Una responsabilidad por servicio"
+          - "Constructor injection"
+          - "Tipos de retorno explícitos"
+          - "Excepciones de dominio específicas"
+    blocking: false
+
+  # --- Fase 4: HTTP Layer ---
+  http:
+    order: 4
+    name: "Capa HTTP"
+    description: "Crear/modificar controllers"
+    steps:
+      - action: "create_controller"
+        template: "controller.php.tpl"
+        target: "src/Controller/{Resource}Controller.php"
+        rules:
+          - "Solo orquestación (deserializar, validar, delegar, responder)"
+          - "Atributos de routing"
+          - "JsonResponse con códigos HTTP correctos"
+          - "Sin lógica de negocio"
+    blocking: false
+
+  # --- Fase 5: Tests ---
+  test:
+    order: 5
+    name: "Tests"
+    description: "Crear tests para cada capa"
+    steps:
+      - action: "create_unit_test"
+        template: "unit_test.php.tpl"
+        target: "tests/Unit/Service/{Name}ServiceTest.php"
+        rules:
+          - "Mockear dependencias externas"
+          - "Testear cada método público"
+          - "Testear casos edge y errores"
+
+      - action: "create_functional_test"
+        template: "functional_test.php.tpl"
+        target: "tests/Functional/Controller/{Resource}ControllerTest.php"
+        rules:
+          - "Testear endpoints HTTP completos"
+          - "Verificar códigos de respuesta"
+          - "Verificar estructura JSON"
+    blocking: false
+
+  # --- Fase 6: Quality Gate ---
+  quality_gate:
+    order: 6
+    name: "Quality Gate"
+    description: "Verificar calidad del código"
+    steps:
+      - action: "run_command"
+        command: "vendor/bin/php-cs-fixer fix"
+        description: "Corregir estilo de código"
+
+      - action: "run_command"
+        command: "vendor/bin/phpstan analyse"
+        description: "Análisis estático"
+
+      - action: "run_command"
+        command: "vendor/bin/phpunit"
+        description: "Ejecutar tests"
+    blocking: true
+    on_failure: "Corregir errores y repetir esta fase"
+
+  # --- Fase 7: Commit ---
+  commit:
+    order: 7
+    name: "Commit"
+    description: "Commit con conventional commits"
+    rules:
+      format: "<type>(<scope>): <description>"
+      types: [feat, fix, docs, style, refactor, test, chore, ci, perf, build, revert]
+      scope: "Dominio del cambio (user, order, product, etc.)"
+      max_subject_length: 72
+
+# ---------------------------------------------------------------------------
+# Reglas globales
+# ---------------------------------------------------------------------------
+global_rules:
+  php:
+    - "declare(strict_types=1) en cada archivo"
+    - "Type hints en parámetros y retorno"
+    - "final en clases que no se van a extender"
+    - "readonly en DTOs"
+    - "Constructor injection siempre"
+
+  naming:
+    entity: "{Name}"
+    repository: "{Name}Repository"
+    service: "{Name}Service"
+    controller: "{Resource}Controller"
+    request_dto: "{Action}{Resource}Request"
+    response_dto: "{Resource}Response"
+    exception: "{Name}Exception"
+    unit_test: "{OriginalClass}Test"
+    functional_test: "{Resource}ControllerTest"
+
+  forbidden:
+    - "Lógica de negocio en Controllers"
+    - "Lógica de negocio en Entities (excepto dominio puro)"
+    - "Arrays asociativos donde un DTO es más apropiado"
+    - "catch \\Exception genérico"
+    - "Static methods para servicios"
+    - "Acceso a superglobals"

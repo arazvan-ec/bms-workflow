@@ -3,7 +3,7 @@
 # ==============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint lint-check analyse test quality up down shell logs build
+.PHONY: help install lint lint-check analyse test quality up down shell logs build scaffold validate factory-check
 
 DOCKER_COMPOSE = docker compose
 PHP_CONTAINER  = $(DOCKER_COMPOSE) exec app
@@ -73,3 +73,23 @@ migrate: ## Run database migrations
 
 diff: ## Generate a migration diff
 	$(PHP_CONTAINER) php bin/console doctrine:migrations:diff
+
+## —— Software Factory —————————————————————————————————————————————
+scaffold: ## Generate scaffolding for a resource (usage: make scaffold NAME=Product)
+	@if [ -z "$(NAME)" ]; then \
+		echo "\033[31mError: Falta el nombre del recurso. Uso: make scaffold NAME=Product\033[0m"; \
+		exit 1; \
+	fi
+	$(PHP_CONTAINER) php .factory/scaffold.php $(NAME) $(ARGS)
+
+scaffold-dry: ## Preview scaffolding without creating files (usage: make scaffold-dry NAME=Product)
+	@if [ -z "$(NAME)" ]; then \
+		echo "\033[31mError: Falta el nombre del recurso. Uso: make scaffold-dry NAME=Product\033[0m"; \
+		exit 1; \
+	fi
+	$(PHP_CONTAINER) php .factory/scaffold.php $(NAME) --dry-run
+
+validate: ## Validate project structure follows Software Factory conventions
+	$(PHP_CONTAINER) php .factory/validate.php
+
+factory-check: quality validate ## Run quality checks + factory validation
